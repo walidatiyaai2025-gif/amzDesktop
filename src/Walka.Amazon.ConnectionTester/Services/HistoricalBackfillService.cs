@@ -23,8 +23,10 @@ public sealed class HistoricalBackfillService(
         var returnCount = 0;
         var financeCount = 0;
         var trafficCount = 0;
+        var trafficStore = new SalesTrafficStore(database.DatabasePath);
 
         await database.InitializeAsync(ct);
+        await trafficStore.InitializeAsync(ct);
         await database.AddCollectionAsync(marketplaceId, "Historical backfill", $"Requested {days} days", ct);
 
         try
@@ -78,8 +80,8 @@ public sealed class HistoricalBackfillService(
             }
         }
 
-        progress?.Invoke("Backfill 4/5 — requesting Sales & Traffic history in chunks…");
-        foreach (var range in Ranges(earliest, now, 90))
+        progress?.Invoke("Backfill 4/5 — requesting Sales & Traffic history in 30-day chunks…");
+        foreach (var range in Ranges(earliest, now, 30))
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -87,6 +89,7 @@ public sealed class HistoricalBackfillService(
                 progress?.Invoke($"Sales & Traffic: {range.Start:yyyy-MM-dd} → {range.End:yyyy-MM-dd}");
                 var raw = await api.GetSalesAndTrafficReportAsync(marketplaceId, accessToken, range.Start, range.End, ct);
                 await database.SaveRawDocumentAsync(marketplaceId, "sales-traffic", range.Start, range.End, raw, ct);
+                await trafficStore.SaveFromJsonAsync(marketplaceId, raw, ct);
                 trafficCount++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -95,7 +98,7 @@ public sealed class HistoricalBackfillService(
             }
         }
 
-        progress?.Invoke("Backfill 5/5 — requesting Finance history in <=180-day windows…");
+        progress?.Invoke("Backfill 5/5 — requesting Finance history in <180-day windows…");
         foreach (var range in Ranges(earliest, now.AddMinutes(-3), 179))
         {
             ct.ThrowIfCancellationRequested();
