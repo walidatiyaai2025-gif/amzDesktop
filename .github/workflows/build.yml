@@ -1,0 +1,23 @@
+name: build
+
+on:
+  push:
+    branches: [ main, feat/sp-api-connection-tester ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build .\src\Walka.Amazon.ConnectionTester\Walka.Amazon.ConnectionTester.csproj -c Release
+      - name: Publish self-contained
+        run: dotnet publish .\src\Walka.Amazon.ConnectionTester\Walka.Amazon.ConnectionTester.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .\artifacts\win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WALKA-Amazon-ConnectionTester-win-x64
+          path: artifacts/win-x64/**
