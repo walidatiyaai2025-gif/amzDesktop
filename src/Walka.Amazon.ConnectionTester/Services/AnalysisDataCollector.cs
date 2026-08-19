@@ -19,40 +19,94 @@ public sealed class AnalysisDataCollector(AmazonSpApiClient api)
         var start30 = now.AddDays(-30);
         var start90 = now.AddDays(-90);
         var outputFolder = CreateOutputFolder(marketplaceId, now);
+        var warnings = new List<string>();
 
-        progress?.Invoke("Collecting hourly Sales API metrics for the last 30 days…");
-        var hourly = await api.GetHourlySalesAsync(marketplaceId, accessToken, 30, ct);
-        var hourOfDay = BuildHourOfDay(hourly, analysisTimeZone);
-        await WriteJsonAsync(Path.Combine(outputFolder, "hourly-sales-30d.json"), hourly, ct);
-        await WriteJsonAsync(Path.Combine(outputFolder, "hour-of-day-summary.json"), hourOfDay, ct);
+        IReadOnlyList<HourlySalesPoint> hourly = Array.Empty<HourlySalesPoint>();
+        IReadOnlyList<HourOfDaySummary> hourOfDay = Array.Empty<HourOfDaySummary>();
+        IReadOnlyList<PriceSnapshotRow> prices = Array.Empty<PriceSnapshotRow>();
+        IReadOnlyList<OrderLineRow> orders = Array.Empty<OrderLineRow>();
+        IReadOnlyList<ReturnRow> returns = Array.Empty<ReturnRow>();
+        string trafficRaw = string.Empty;
+        IReadOnlyList<string> financePages = Array.Empty<string>();
+
+        try
+        {
+            progress?.Invoke("Collecting hourly Sales API metrics for the last 30 days…");
+            hourly = await api.GetHourlySalesAsync(marketplaceId, accessToken, 30, ct);
+            hourOfDay = BuildHourOfDay(hourly, analysisTimeZone);
+            await WriteJsonAsync(Path.Combine(outputFolder, "hourly-sales-30d.json"), hourly, ct);
+            await WriteJsonAsync(Path.Combine(outputFolder, "hour-of-day-summary.json"), hourOfDay, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("Hourly Sales API", ex, warnings, progress);
+        }
 
         progress?.Invoke("Saving current FBA inventory snapshot…");
         await WriteJsonAsync(Path.Combine(outputFolder, "inventory-snapshot.json"), inventory, ct);
 
-        progress?.Invoke("Collecting current seller price snapshots…");
-        var prices = await api.GetPriceSnapshotsAsync(marketplaceId, inventory, accessToken, ct);
-        await WriteJsonAsync(Path.Combine(outputFolder, "price-snapshot.json"), prices, ct);
+        try
+        {
+            progress?.Invoke("Collecting current seller price snapshots…");
+            prices = await api.GetPriceSnapshotsAsync(marketplaceId, inventory, accessToken, ct);
+            await WriteJsonAsync(Path.Combine(outputFolder, "price-snapshot.json"), prices, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("Product Pricing", ex, warnings, progress);
+        }
 
-        progress?.Invoke("Requesting 30-day All Orders report (item-level purchase time, SKU, ASIN, price, promotions)…");
-        var ordersRaw = await api.GetAllOrdersReportAsync(marketplaceId, accessToken, start30, now, ct);
-        var orders = ParseOrders(ordersRaw);
-        await File.WriteAllTextAsync(Path.Combine(outputFolder, "orders-30d.tsv"), ordersRaw, new UTF8Encoding(false), ct);
-        await WriteJsonAsync(Path.Combine(outputFolder, "orders-30d.json"), orders, ct);
+        try
+        {
+            progress?.Invoke("Requesting 30-day All Orders report (purchase time, SKU, ASIN, price, promotions)…");
+            var ordersRaw = await api.GetAllOrdersReportAsync(marketplaceId, accessToken, start30, now, ct);
+            orders = ParseOrders(ordersRaw);
+            await File.WriteAllTextAsync(Path.Combine(outputFolder, "orders-30d.tsv"), ordersRaw, new UTF8Encoding(false), ct);
+            await WriteJsonAsync(Path.Combine(outputFolder, "orders-30d.json"), orders, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("All Orders report", ex, warnings, progress);
+        }
 
-        progress?.Invoke("Requesting 30-day FBA customer returns report (reason, disposition, comments)…");
-        var returnsRaw = await api.GetFbaReturnsReportAsync(marketplaceId, accessToken, start30, now, ct);
-        var returns = ParseReturns(returnsRaw);
-        await File.WriteAllTextAsync(Path.Combine(outputFolder, "returns-30d.tsv"), returnsRaw, new UTF8Encoding(false), ct);
-        await WriteJsonAsync(Path.Combine(outputFolder, "returns-30d.json"), returns, ct);
+        try
+        {
+            progress?.Invoke("Requesting 30-day FBA customer returns report (reason, disposition, comments)…");
+            var returnsRaw = await api.GetFbaReturnsReportAsync(marketplaceId, accessToken, start30, now, ct);
+            returns = ParseReturns(returnsRaw);
+            await File.WriteAllTextAsync(Path.Combine(outputFolder, "returns-30d.tsv"), returnsRaw, new UTF8Encoding(false), ct);
+            await WriteJsonAsync(Path.Combine(outputFolder, "returns-30d.json"), returns, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("FBA Returns report", ex, warnings, progress);
+        }
 
-        progress?.Invoke("Requesting Sales & Traffic report (sessions/page views/Buy Box/conversion inputs)…");
-        var trafficRaw = await api.GetSalesAndTrafficReportAsync(marketplaceId, accessToken, start30, now, ct);
-        await File.WriteAllTextAsync(Path.Combine(outputFolder, "sales-traffic-30d.json"), trafficRaw, new UTF8Encoding(false), ct);
+        try
+        {
+            progress?.Invoke("Requesting Sales & Traffic report (sessions, page views, Buy Box, conversion, refunds)…");
+            trafficRaw = await api.GetSalesAndTrafficReportAsync(marketplaceId, accessToken, start30, now, ct);
+            await File.WriteAllTextAsync(Path.Combine(outputFolder, "sales-traffic-30d.json"), trafficRaw, new UTF8Encoding(false), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("Sales & Traffic report", ex, warnings, progress);
+        }
 
-        progress?.Invoke("Collecting Finance transactions for the last 90 days (fees/refunds/settlement inputs)…");
-        var financePages = await api.GetFinanceTransactionPagesAsync(marketplaceId, accessToken, start90, now.AddMinutes(-3), ct);
-        for (var i = 0; i < financePages.Count; i++)
-            await File.WriteAllTextAsync(Path.Combine(outputFolder, $"finance-90d-page-{i + 1:000}.json"), financePages[i], new UTF8Encoding(false), ct);
+        try
+        {
+            progress?.Invoke("Collecting Finance transactions for the last 90 days (fees, refunds, settlement inputs)…");
+            financePages = await api.GetFinanceTransactionPagesAsync(marketplaceId, accessToken, start90, now.AddMinutes(-3), ct);
+            for (var i = 0; i < financePages.Count; i++)
+                await File.WriteAllTextAsync(Path.Combine(outputFolder, $"finance-90d-page-{i + 1:000}.json"), financePages[i], new UTF8Encoding(false), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Warn("Finances", ex, warnings, progress);
+        }
+
+        if (warnings.Count > 0)
+            await File.WriteAllLinesAsync(Path.Combine(outputFolder, "warnings.txt"), warnings, new UTF8Encoding(false), ct);
 
         var manifest = new
         {
@@ -64,11 +118,23 @@ public sealed class AnalysisDataCollector(AmazonSpApiClient api)
             returnLines = returns.Count,
             priceSnapshots = prices.Count,
             financePages = financePages.Count,
+            warnings,
             files = Directory.GetFiles(outputFolder).Select(Path.GetFileName).OrderBy(x => x).ToArray()
         };
         await WriteJsonAsync(Path.Combine(outputFolder, "manifest.json"), manifest, ct);
 
+        progress?.Invoke(warnings.Count == 0
+            ? "All requested analysis datasets completed."
+            : $"Analysis pack saved with {warnings.Count} optional dataset warning(s); see warnings.txt.");
+
         return new AnalysisPackResult(outputFolder, hourly, hourOfDay, orders, returns, prices, trafficRaw, financePages);
+    }
+
+    private static void Warn(string dataset, Exception ex, List<string> warnings, Action<string>? progress)
+    {
+        var message = $"{dataset}: {ex.Message}";
+        warnings.Add(message);
+        progress?.Invoke("WARNING — " + message + " Continuing with remaining datasets.");
     }
 
     private static IReadOnlyList<HourOfDaySummary> BuildHourOfDay(IReadOnlyList<HourlySalesPoint> hourly, TimeZoneInfo zone)
