@@ -96,6 +96,36 @@ public sealed record SalesAttributionRow(
     decimal AcosPercent,
     decimal TacosPercent);
 
+public sealed record SalesTrafficDailyRow(
+    string MarketplaceId,
+    DateTime Date,
+    string ParentAsin,
+    string ChildAsin,
+    string SellerSku,
+    decimal OrderedProductSales,
+    int UnitsOrdered,
+    int TotalOrderItems,
+    long Sessions,
+    long PageViews,
+    decimal BuyBoxPercentage,
+    decimal UnitSessionPercentage,
+    int UnitsRefunded,
+    decimal RefundRate,
+    decimal AverageSellingPrice,
+    string Currency);
+
+public sealed record TrafficSummaryRow(
+    DateTime Date,
+    decimal Sales,
+    int Units,
+    long Sessions,
+    long PageViews,
+    decimal ConversionPercent,
+    decimal BuyBoxPercent,
+    int UnitsRefunded,
+    decimal RefundRatePercent,
+    decimal AverageSellingPrice);
+
 public sealed record DatabaseCoverage(
     DateTimeOffset? FirstHourlyUtc,
     DateTimeOffset? LastHourlyUtc,
