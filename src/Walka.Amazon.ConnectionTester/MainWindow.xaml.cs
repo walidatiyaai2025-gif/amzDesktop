@@ -35,6 +35,7 @@ public partial class MainWindow : Window
         try
         {
             var api = new AmazonSpApiClient(_httpClient);
+
             Log("1/4 Requesting LWA access token…");
             var token = await api.GetAccessTokenAsync(clientId, clientSecret, refreshToken);
             ConnectionValue.Text = "LWA OK";
@@ -46,23 +47,53 @@ public partial class MainWindow : Window
             ConnectionValue.Text = $"SP-API OK · {marketplaces.Count} markets";
             Log($"Loaded {marketplaces.Count} marketplace participation records.");
 
-            Log("3/4 Loading last 7 days Sales API metrics…");
-            var sales = await api.GetLast7DaysSalesAsync(marketplaceId, token);
-            OrdersValue.Text = $"{sales.Orders:N0} orders / {sales.Units:N0} units";
-            SalesValue.Text = string.IsNullOrWhiteSpace(sales.Currency) ? sales.Sales.ToString("N2") : $"{sales.Sales:N2} {sales.Currency}";
-            Log($"Sales loaded: {sales.Orders} orders, {sales.Units} units, {sales.Sales:N2} {sales.Currency}.");
+            var partialFailures = new List<string>();
 
-            Log("4/4 Loading FBA inventory summaries…");
-            var inventory = await api.GetInventoryAsync(marketplaceId, token);
-            InventoryGrid.ItemsSource = inventory;
-            InventoryValue.Text = $"{inventory.Sum(x => x.Fulfillable):N0} units";
-            Log($"Inventory loaded: {inventory.Count} SKUs, {inventory.Sum(x => x.Fulfillable)} fulfillable units.");
-            Log("DONE — production SP-API connection is working.");
+            try
+            {
+                Log("3/4 Loading last 7 days Sales API metrics…");
+                var sales = await api.GetLast7DaysSalesAsync(marketplaceId, token);
+                OrdersValue.Text = $"{sales.Orders:N0} orders / {sales.Units:N0} units";
+                SalesValue.Text = string.IsNullOrWhiteSpace(sales.Currency) ? sales.Sales.ToString("N2") : $"{sales.Sales:N2} {sales.Currency}";
+                Log($"Sales loaded: {sales.Orders} orders, {sales.Units} units, {sales.Sales:N2} {sales.Currency}.");
+            }
+            catch (Exception salesEx)
+            {
+                partialFailures.Add("Sales");
+                OrdersValue.Text = "Error";
+                SalesValue.Text = "Error";
+                Log("SALES ERROR: " + salesEx.Message);
+            }
+
+            try
+            {
+                Log("4/4 Loading FBA inventory summaries…");
+                var inventory = await api.GetInventoryAsync(marketplaceId, token);
+                InventoryGrid.ItemsSource = inventory;
+                InventoryValue.Text = $"{inventory.Sum(x => x.Fulfillable):N0} units";
+                Log($"Inventory loaded: {inventory.Count} SKUs, {inventory.Sum(x => x.Fulfillable)} fulfillable units.");
+            }
+            catch (Exception inventoryEx)
+            {
+                partialFailures.Add("FBA Inventory");
+                InventoryValue.Text = "Error";
+                Log("INVENTORY ERROR: " + inventoryEx.Message);
+            }
+
+            if (partialFailures.Count == 0)
+            {
+                Log("DONE — production SP-API connection is working and all test datasets loaded.");
+            }
+            else
+            {
+                ConnectionValue.Text = "SP-API OK · partial data";
+                Log($"DONE — authentication and SP-API connection are working. Failed panels: {string.Join(", ", partialFailures)}.");
+            }
         }
         catch (Exception ex)
         {
             ConnectionValue.Text = "Failed";
-            Log("ERROR: " + ex.Message);
+            Log("CONNECTION ERROR: " + ex.Message);
             MessageBox.Show(ex.Message, "Amazon connection failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
