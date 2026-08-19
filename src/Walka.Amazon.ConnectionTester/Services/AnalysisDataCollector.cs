@@ -85,9 +85,10 @@ public sealed class AnalysisDataCollector(AmazonSpApiClient api)
             var units = rows.Sum(x => x.Point.Units);
             var sales = rows.Sum(x => x.Point.Sales);
             var observedDays = Math.Max(1, rows.Select(x => x.Local.Date).Distinct().Count());
+            var nextHour = (hour + 1) % 24;
             return new HourOfDaySummary(
                 hour,
-                $"{hour:00}:00–{(hour + 1) % 24:00}:00",
+                $"{hour:00}:00–{nextHour:00}:00",
                 orders,
                 units,
                 sales,
