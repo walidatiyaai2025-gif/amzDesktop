@@ -1,0 +1,74 @@
+name: Build RemoteScreen V2.1
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'remotescreen-v21/**'
+      - '.github/workflows/remotescreen-v21.yml'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish Windows EXE
+        shell: pwsh
+        run: |
+          dotnet restore remotescreen-v21/windows/RemoteScreenDesktopV21.csproj
+          dotnet publish remotescreen-v21/windows/RemoteScreenDesktopV21.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          Copy-Item remotescreen-v21/windows/bin/Release/net8.0-windows/win-x64/publish/RemoteScreenDesktopV21.exe RemoteScreenDesktopV21.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemoteScreenDesktopV21-EXE
+          path: RemoteScreenDesktopV21.exe
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Create Android project
+        shell: bash
+        run: |
+          rm -rf /tmp/remote_screen_mobile_v21
+          flutter create --platforms=android --org com.walid.remotescreen --project-name remote_screen_mobile_v21 /tmp/remote_screen_mobile_v21
+          cp remotescreen-v21/mobile/pubspec.yaml /tmp/remote_screen_mobile_v21/pubspec.yaml
+          cp remotescreen-v21/mobile/lib/main.dart /tmp/remote_screen_mobile_v21/lib/main.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/remote_screen_mobile_v21/android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          if 'android.permission.INTERNET' not in s:
+              s=s.replace('>', '>\n    <uses-permission android:name="android.permission.INTERNET"/>', 1)
+          s=s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          p.write_text(s)
+          PY
+      - name: Build release APK
+        shell: bash
+        run: |
+          cd /tmp/remote_screen_mobile_v21
+          rm -rf test
+          rm -f analysis_options.yaml
+          flutter pub get
+          flutter analyze lib/main.dart
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/RemoteScreenMobileV21.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemoteScreenMobileV21-APK
+          path: RemoteScreenMobileV21.apk
+          if-no-files-found: error
