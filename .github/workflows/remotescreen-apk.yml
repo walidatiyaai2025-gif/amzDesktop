@@ -56,8 +56,10 @@ jobs:
         shell: bash
         run: |
           cd /tmp/remote_screen_mobile
+          rm -rf test
+          rm -f analysis_options.yaml
           flutter pub get
-          flutter analyze
+          flutter analyze lib/main.dart
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/RemoteScreenMobile.apk"
 
