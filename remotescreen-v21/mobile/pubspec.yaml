@@ -1,0 +1,15 @@
+name: remote_screen_mobile_v21
+description: Remote Screen Mobile V2.1
+publish_to: 'none'
+version: 0.2.1+3
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.9.46
+
+flutter:
+  uses-material-design: true
