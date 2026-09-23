@@ -144,7 +144,7 @@ class ViewerPage extends StatefulWidget {
 
 class _ViewerPageState extends State<ViewerPage> {
   Uint8List? _frame;
-  StreamSubscription<Uint8List>? _subscription;
+  StreamSubscription<List<int>>? _subscription;
   final List<int> _buffer = <int>[];
   int _frames = 0;
   int _fps = 0;
