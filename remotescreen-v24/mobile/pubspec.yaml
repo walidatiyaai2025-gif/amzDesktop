@@ -1,0 +1,14 @@
+name: remote_screen_mobile_v24
+description: Remote Screen Mobile V2.4 with native PCM system audio.
+publish_to: 'none'
+version: 0.2.4+6
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
