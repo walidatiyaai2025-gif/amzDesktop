@@ -5,7 +5,7 @@ using SharpGen.Runtime;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using WindowsCapture;
+using Lvhang.WindowsCapture;
 using MapFlags = Vortice.Direct3D11.MapFlags;
 using DxgiResultCode = Vortice.DXGI.ResultCode;
 
@@ -258,6 +258,7 @@ sealed class WindowsGraphicsCaptureBackend : ICaptureBackend
 {
     readonly object sync = new();
     readonly WindowsCaptureSession session;
+    readonly System.Windows.Window pickerOwner;
 
     byte[]? latestJpeg;
     int width;
@@ -276,8 +277,25 @@ sealed class WindowsGraphicsCaptureBackend : ICaptureBackend
         width = primary.Width;
         height = primary.Height;
 
+        // Lvhang.WindowsCapture 1.1.0 expects a WPF Window as the picker owner.
+        // Create a tiny hidden WPF owner and force its HWND to exist.
+        pickerOwner = new System.Windows.Window
+        {
+            Width = 1,
+            Height = 1,
+            Left = -10000,
+            Top = -10000,
+            ShowInTaskbar = false,
+            WindowStyle = System.Windows.WindowStyle.None,
+            ResizeMode = System.Windows.ResizeMode.NoResize,
+            Opacity = 0
+        };
+
+        _ = new System.Windows.Interop.WindowInteropHelper(pickerOwner)
+            .EnsureHandle();
+
         session = new WindowsCaptureSession(
-            ownerHwnd,
+            pickerOwner,
             new WindowsCaptureSessionOptions
             {
                 MinFrameInterval = 60,
@@ -350,6 +368,7 @@ sealed class WindowsGraphicsCaptureBackend : ICaptureBackend
 
         try { session.StopCapture(); } catch { }
         try { session.Dispose(); } catch { }
+        try { pickerOwner.Close(); } catch { }
     }
 }
 
