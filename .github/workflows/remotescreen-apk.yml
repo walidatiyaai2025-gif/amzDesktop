@@ -1,0 +1,62 @@
+name: Build RemoteScreen APK
+
+on:
+  push:
+    branches:
+      - build/remotescreen-apk-20260923
+    paths:
+      - 'remotescreen-build/**'
+      - '.github/workflows/remotescreen-apk.yml'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          rm -rf /tmp/remote_screen_mobile
+          flutter create --platforms=android --org com.walid.remotescreen --project-name remote_screen_mobile /tmp/remote_screen_mobile
+          cp remotescreen-build/pubspec.yaml /tmp/remote_screen_mobile/pubspec.yaml
+          cp remotescreen-build/lib/main.dart /tmp/remote_screen_mobile/lib/main.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/remote_screen_mobile/android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          if 'android.permission.INTERNET' not in s:
+              s=s.replace('>', '>\n    <uses-permission android:name="android.permission.INTERNET"/>', 1)
+          s=s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          p.write_text(s)
+          PY
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          cd /tmp/remote_screen_mobile
+          flutter pub get
+          flutter analyze
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/RemoteScreenMobile.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteScreenMobile-APK
+          path: RemoteScreenMobile.apk
+          if-no-files-found: error
