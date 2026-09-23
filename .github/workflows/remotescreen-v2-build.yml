@@ -1,0 +1,114 @@
+name: Build RemoteScreen V2 Audio
+
+on:
+  push:
+    branches:
+      - build/remotescreen-v2-audio-20260923
+    paths:
+      - 'remotescreen-v2/**'
+      - '.github/workflows/remotescreen-v2-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'remotescreen-v2/**'
+      - '.github/workflows/remotescreen-v2-build.yml'
+
+jobs:
+  desktop:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained Windows x64
+        shell: pwsh
+        run: |
+          dotnet restore remotescreen-v2/desktop/RemoteScreenDesktopV2.csproj
+          dotnet publish remotescreen-v2/desktop/RemoteScreenDesktopV2.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:EnableCompressionInSingleFile=true -o out/desktop
+          Copy-Item out/desktop/RemoteScreenDesktopV2.exe RemoteScreenDesktopV2.exe
+          Get-FileHash RemoteScreenDesktopV2.exe -Algorithm SHA256
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteScreenDesktopV2-Windows
+          path: RemoteScreenDesktopV2.exe
+          if-no-files-found: error
+
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          rm -rf /tmp/remote_screen_mobile
+          flutter create --platforms=android --org com.walid.remotescreen --project-name remote_screen_mobile /tmp/remote_screen_mobile
+
+          cp remotescreen-v2/mobile/pubspec.yaml /tmp/remote_screen_mobile/pubspec.yaml
+          cp remotescreen-v2/mobile/lib/main.dart /tmp/remote_screen_mobile/lib/main.dart
+
+          MAIN_ACTIVITY=/tmp/remote_screen_mobile/android/app/src/main/kotlin/com/walid/remotescreen/remote_screen_mobile/MainActivity.kt
+          mkdir -p "$(dirname "$MAIN_ACTIVITY")"
+          cp remotescreen-v2/mobile/android/MainActivity.kt "$MAIN_ACTIVITY"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/remote_screen_mobile/android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          if 'android.permission.INTERNET' not in s:
+              s = s.replace(
+                  '>',
+                  '>\n    <uses-permission android:name="android.permission.INTERNET"/>\n'
+                  '    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n'
+                  '    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>',
+                  1
+              )
+          s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          p.write_text(s)
+          PY
+
+          rm -rf /tmp/remote_screen_mobile/test
+          rm -f /tmp/remote_screen_mobile/analysis_options.yaml
+
+      - name: Analyze and build release APK
+        shell: bash
+        run: |
+          cd /tmp/remote_screen_mobile
+          flutter pub get
+          flutter analyze lib/main.dart
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/RemoteScreenMobileV2.apk"
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteScreenMobileV2-APK
+          path: RemoteScreenMobileV2.apk
+          if-no-files-found: error
