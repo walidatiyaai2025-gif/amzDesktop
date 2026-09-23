@@ -8,6 +8,13 @@ on:
       - 'remotescreen-build/**'
       - '.github/workflows/remotescreen-apk.yml'
 
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'remotescreen-build/**'
+      - '.github/workflows/remotescreen-apk.yml'
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
