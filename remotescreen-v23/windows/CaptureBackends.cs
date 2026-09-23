@@ -6,6 +6,7 @@ using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using MapFlags = Vortice.Direct3D11.MapFlags;
+using DxgiResultCode = Vortice.DXGI.ResultCode;
 
 enum CaptureBackendMode
 {
@@ -193,7 +194,7 @@ sealed class DxgiCaptureBackend : ICaptureBackend
 
             if (result.Failure)
             {
-                if (result.Code == ResultCode.WaitTimeout.Code && lastJpeg is not null)
+                if (result.Code == DxgiResultCode.WaitTimeout.Code && lastJpeg is not null)
                     return lastJpeg;
 
                 result.CheckError();
@@ -248,7 +249,7 @@ sealed class DxgiCaptureBackend : ICaptureBackend
                 context.Unmap(stagingTexture, 0);
             }
         }
-        catch (SharpGenException ex) when (ex.ResultCode.Code == ResultCode.WaitTimeout.Code && lastJpeg is not null)
+        catch (SharpGenException ex) when (ex.ResultCode.Code == DxgiResultCode.WaitTimeout.Code && lastJpeg is not null)
         {
             return lastJpeg;
         }
